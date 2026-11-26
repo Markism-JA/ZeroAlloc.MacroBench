@@ -27,8 +27,66 @@ public sealed class SampleGeneratedSweepProbe : IMacroProbe
     }
 }
 
+[MacroProbe("Generated.AsyncBroker")]
+public sealed class SampleGeneratedAsyncProbe : IAsyncMacroProbe
+{
+    public string Name => "Generated.AsyncBroker";
+    public bool SetupAwaited { get; private set; }
+    public bool TeardownAwaited { get; private set; }
+
+    public async ValueTask SetupAsync(ProbeContext context)
+    {
+        await Task.Yield();
+        SetupAwaited = true;
+    }
+
+    public async ValueTask MeasureAsync(ProbeContext context)
+    {
+        await Task.Delay(5, context.CancellationToken);
+        context.RecordLatencyNs(1_200);
+        context.AddOperations(10);
+        context.SetCustomMetric("DemoteUs", 420.5);
+    }
+
+    public async ValueTask TeardownAsync(ProbeContext context)
+    {
+        await Task.Yield();
+        TeardownAwaited = true;
+    }
+}
+
 public class SourceGeneratorAndSwitcherTests
 {
+    [Fact]
+    public async Task GeneratedProbes_SupportsIAsyncMacroProbeNatively()
+    {
+        IReadOnlyList<IMacroProbe> probes = GeneratedProbes.CreateAll();
+        IMacroProbe asyncProbe = Assert.Single(probes, p => p.Name == "Generated.AsyncBroker");
+
+        var config = ProbeRunConfig.Default
+            .WithArtifactsDirectory(null)
+            .WithLoggers()
+            .WithExporters() with
+        {
+            ElevateProcessPriority = false,
+            UseHighResolutionTimerScope = false,
+            CollectGcBeforeMeasure = false,
+            LiveProgressInterval = TimeSpan.Zero,
+        };
+
+        ProbeRunSummary summary = await ProbeRunner.RunAsync(config, [asyncProbe]);
+        ProbeReport report = Assert.Single(summary.Reports);
+
+        Assert.Equal(10, report.TotalOperations);
+        Assert.NotNull(report.CustomMetrics);
+        Assert.Equal(420.5, report.CustomMetrics!["DemoteUs"]);
+
+        var inner = asyncProbe is ConfiguredMacroProbe cfg
+            ? (SampleGeneratedAsyncProbe)cfg.Inner
+            : (SampleGeneratedAsyncProbe)asyncProbe;
+        Assert.True(inner.SetupAwaited);
+        Assert.True(inner.TeardownAwaited);
+    }
     [Fact]
     public void GeneratedProbes_ExpandsCartesianParamsAndBudget()
     {

@@ -73,7 +73,38 @@ public sealed class CsvExporter : IProbeExporter
 
         File.WriteAllText(summaryPath, summarySb.ToString());
         File.WriteAllText(percentilesPath, pctSb.ToString());
-        return [summaryPath, percentilesPath];
+
+        var files = new List<string> { summaryPath, percentilesPath };
+        if (summary.Reports.Any(r => r.CustomMetrics is { Count: > 0 }))
+        {
+            string customPath = Path.Combine(artifactsDirectory, "custom_metrics.csv");
+            var customSb = new StringBuilder();
+            customSb.AppendLine("ProbeName,Scenario,MetricName,Value");
+            foreach (ProbeReport r in summary.Reports)
+            {
+                if (r.CustomMetrics is not { Count: > 0 })
+                    continue;
+
+                foreach (KeyValuePair<string, double> kvp in r.CustomMetrics)
+                {
+                    customSb.AppendLine(
+                        string.Format(
+                            CultureInfo.InvariantCulture,
+                            "{0},{1},{2},{3:G}",
+                            Escape(r.ProbeName),
+                            Escape(r.Scenario),
+                            Escape(kvp.Key),
+                            kvp.Value
+                        )
+                    );
+                }
+            }
+
+            File.WriteAllText(customPath, customSb.ToString());
+            files.Add(customPath);
+        }
+
+        return files;
     }
 
     private static void AppendPercentile(StringBuilder sb, ProbeReport r, string pct, long ns)

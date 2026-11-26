@@ -87,6 +87,25 @@ public sealed class ConsoleSummaryExporter : IProbeExporter
         }
 
         _writer.WriteLine(divider);
+
+        bool hasCustom = summary.Reports.Any(r => r.CustomMetrics is { Count: > 0 });
+        if (hasCustom)
+        {
+            _writer.WriteLine("Custom Metrics:");
+            foreach (ProbeReport r in summary.Reports)
+            {
+                if (r.CustomMetrics is not { Count: > 0 })
+                    continue;
+
+                string label = string.IsNullOrEmpty(r.Scenario) ? r.ProbeName : $"{r.ProbeName} ({r.Scenario})";
+                string pairs = string.Join(
+                    ", ",
+                    r.CustomMetrics.Select(kvp => string.Format(CultureInfo.InvariantCulture, "{0}={1:G}", kvp.Key, kvp.Value))
+                );
+                _writer.WriteLine($"  - {label}: {pairs}");
+            }
+        }
+
         _writer.WriteLine();
         return Array.Empty<string>();
     }

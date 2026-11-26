@@ -12,14 +12,25 @@ namespace MacroBench.Execution;
 /// Orchestrates <see cref="IMacroProbe"/> lifecycles, GC delta tracking, Seqlock live progress polling,
 /// budget evaluation, and decoupled artifact export.
 /// </summary>
-public static unsafe class ProbeRunner
+public static class ProbeRunner
 {
     /// <summary>Runs the specified probes using <see cref="ProbeRunConfig.Default"/>.</summary>
     public static ProbeRunSummary Run(params IMacroProbe[] probes) =>
         Run(ProbeRunConfig.Default, probes, CancellationToken.None);
 
-    /// <summary>Runs the specified probes using <paramref name="config"/> and returns the immutable run summary.</summary>
+    /// <summary>Runs the specified probes synchronously using <paramref name="config"/> and returns the immutable run summary.</summary>
     public static ProbeRunSummary Run(
+        ProbeRunConfig config,
+        IEnumerable<IMacroProbe> probes,
+        CancellationToken cancellationToken = default
+    ) => RunAsync(config, probes, cancellationToken).GetAwaiter().GetResult();
+
+    /// <summary>Asynchronously runs the specified probes (awaiting <see cref="IAsyncMacroProbe"/> natively) using <see cref="ProbeRunConfig.Default"/>.</summary>
+    public static Task<ProbeRunSummary> RunAsync(params IMacroProbe[] probes) =>
+        RunAsync(ProbeRunConfig.Default, probes, CancellationToken.None);
+
+    /// <summary>Asynchronously runs the specified probes (awaiting <see cref="IAsyncMacroProbe"/> natively) and returns the immutable run summary.</summary>
+    public static async Task<ProbeRunSummary> RunAsync(
         ProbeRunConfig config,
         IEnumerable<IMacroProbe> probes,
         CancellationToken cancellationToken = default
@@ -53,7 +64,7 @@ public static unsafe class ProbeRunner
         foreach (IMacroProbe probe in probes)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            reports.Add(ExecuteSingleProbe(probe, host, config, cancellationToken));
+            reports.Add(await ExecuteSingleProbeAsync(probe, host, config, cancellationToken).ConfigureAwait(false));
         }
 
         TimeSpan totalDuration = TimeSpan.FromTicks(
@@ -102,13 +113,22 @@ public static unsafe class ProbeRunner
         return summary;
     }
 
-    private static ProbeReport ExecuteSingleProbe(
+    private static IAsyncMacroProbe? UnwrapAsync(IMacroProbe probe) =>
+        probe switch
+        {
+            IAsyncMacroProbe asyncProbe => asyncProbe,
+            ConfiguredMacroProbe { Inner: IAsyncMacroProbe innerAsync } => innerAsync,
+            _ => null,
+        };
+
+    private static async Task<ProbeReport> ExecuteSingleProbeAsync(
         IMacroProbe probe,
         HostEnvironmentInfo host,
         ProbeRunConfig config,
         CancellationToken cancellationToken
     )
     {
+        IAsyncMacroProbe? asyncProbe = UnwrapAsync(probe);
         using var context = new ProbeContext(
             host,
             config.WarmupDuration,
@@ -119,10 +139,16 @@ public static unsafe class ProbeRunner
         try
         {
             Emit(config, ProbeLogEventKind.PhaseStarted, probe.Name, "Setup", "Initializing probe resources");
-            probe.Setup(context);
+            if (asyncProbe is not null)
+                await asyncProbe.SetupAsync(context).ConfigureAwait(false);
+            else
+                probe.Setup(context);
 
             Emit(config, ProbeLogEventKind.PhaseStarted, probe.Name, "Warmup", $"Warming up ({config.WarmupDuration.TotalMilliseconds:F0} ms target)");
-            probe.Warmup(context);
+            if (asyncProbe is not null)
+                await asyncProbe.WarmupAsync(context).ConfigureAwait(false);
+            else
+                probe.Warmup(context);
 
             context.ResetForMeasurement();
             if (config.CollectGcBeforeMeasure)
@@ -138,7 +164,10 @@ public static unsafe class ProbeRunner
             using Timer? progressTimer = StartLiveProgressTimer(probe.Name, context, config, measureStartNs);
 
             GcDeltaTracker gcTracker = GcDeltaTracker.Start();
-            probe.Measure(context);
+            if (asyncProbe is not null)
+                await asyncProbe.MeasureAsync(context).ConfigureAwait(false);
+            else
+                probe.Measure(context);
             GcDelta gcDelta = gcTracker.Stop();
 
             long measureElapsedNs = Math.Max(1, NativeTsc.NowNs() - measureStartNs);
@@ -208,11 +237,14 @@ public static unsafe class ProbeRunner
         finally
         {
             Emit(config, ProbeLogEventKind.PhaseStarted, probe.Name, "Teardown", "Releasing probe resources");
-            probe.Teardown(context);
+            if (asyncProbe is not null)
+                await asyncProbe.TeardownAsync(context).ConfigureAwait(false);
+            else
+                probe.Teardown(context);
         }
     }
 
-    private static Timer? StartLiveProgressTimer(
+    private static unsafe Timer? StartLiveProgressTimer(
         string probeName,
         ProbeContext context,
         ProbeRunConfig config,

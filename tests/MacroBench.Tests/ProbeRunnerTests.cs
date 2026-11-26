@@ -113,20 +113,28 @@ public class ProbeRunnerTests
             string mdPath = Path.Combine(tempDir, "summary.md");
             string csvPath = Path.Combine(tempDir, "summary.csv");
             string pctPath = Path.Combine(tempDir, "percentiles.csv");
+            string customCsvPath = Path.Combine(tempDir, "custom_metrics.csv");
 
             Assert.True(File.Exists(jsonPath));
             Assert.True(File.Exists(mdPath));
             Assert.True(File.Exists(csvPath));
             Assert.True(File.Exists(pctPath));
+            Assert.True(File.Exists(customCsvPath));
 
             using JsonDocument doc = JsonDocument.Parse(File.ReadAllText(jsonPath));
             Assert.Equal("Synthetic.Ring", doc.RootElement.GetProperty("Reports")[0].GetProperty("ProbeName").GetString());
-            Assert.Contains("Synthetic.Ring", File.ReadAllText(mdPath));
+            string mdText = File.ReadAllText(mdPath);
+            Assert.Contains("Synthetic.Ring", mdText);
+            Assert.Contains("## Custom Metrics", mdText);
+            Assert.Contains("CustomMetric", mdText);
             Assert.Contains("Synthetic.Ring,64B", File.ReadAllText(csvPath));
             Assert.Contains("Synthetic.Ring,64B,99,", File.ReadAllText(pctPath));
+            Assert.Contains("Synthetic.Ring,64B,CustomMetric,42.5", File.ReadAllText(customCsvPath));
             Assert.Contains("[PASS] [Synthetic.Ring]", consoleLog.ToString());
             Assert.Contains("ProbeCompleted", jsonlLog.ToString());
-            Assert.Contains("PASS", consoleTable.ToString());
+            string tableText = consoleTable.ToString();
+            Assert.Contains("PASS", tableText);
+            Assert.Contains("CustomMetric=42.5", tableText);
         }
         finally
         {

@@ -12,12 +12,21 @@ namespace MacroBench.Execution;
 /// </summary>
 public static class ProbeSwitcher
 {
-    /// <summary>Parses CLI arguments, filters probes, runs them, and returns 0 on success or 1 on failure.</summary>
+    /// <summary>Parses CLI arguments, filters probes, runs them synchronously, and returns 0 on success or 1 on failure.</summary>
     public static int Run(
         string[] args,
         IReadOnlyList<IMacroProbe> probes,
         ProbeRunConfig? baseConfig = null,
         TextWriter? output = null
+    ) => RunAsync(args, probes, baseConfig, output).GetAwaiter().GetResult();
+
+    /// <summary>Parses CLI arguments, filters probes, runs them asynchronously, and returns 0 on success or 1 on failure.</summary>
+    public static async Task<int> RunAsync(
+        string[] args,
+        IReadOnlyList<IMacroProbe> probes,
+        ProbeRunConfig? baseConfig = null,
+        TextWriter? output = null,
+        CancellationToken cancellationToken = default
     )
     {
         ArgumentNullException.ThrowIfNull(args);
@@ -77,7 +86,7 @@ public static class ProbeSwitcher
 
         try
         {
-            ProbeRunSummary summary = ProbeRunner.Run(config, selected);
+            ProbeRunSummary summary = await ProbeRunner.RunAsync(config, selected, cancellationToken).ConfigureAwait(false);
 
             if (!string.IsNullOrWhiteSpace(baselinePath))
             {

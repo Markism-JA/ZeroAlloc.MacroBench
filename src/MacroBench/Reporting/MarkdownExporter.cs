@@ -78,6 +78,34 @@ public sealed class MarkdownExporter : IProbeExporter
             );
         }
 
+        if (summary.Reports.Any(r => r.CustomMetrics is { Count: > 0 }))
+        {
+            sb.AppendLine();
+            sb.AppendLine("## Custom Metrics");
+            sb.AppendLine();
+            sb.AppendLine("| Probe | Scenario | Metric | Value |");
+            sb.AppendLine("| :--- | :--- | :--- | ---: |");
+            foreach (ProbeReport r in summary.Reports)
+            {
+                if (r.CustomMetrics is not { Count: > 0 })
+                    continue;
+
+                foreach (KeyValuePair<string, double> kvp in r.CustomMetrics)
+                {
+                    sb.AppendLine(
+                        string.Format(
+                            CultureInfo.InvariantCulture,
+                            "| `{0}` | {1} | `{2}` | {3:G} |",
+                            r.ProbeName,
+                            string.IsNullOrEmpty(r.Scenario) ? "—" : r.Scenario,
+                            kvp.Key,
+                            kvp.Value
+                        )
+                    );
+                }
+            }
+        }
+
         return sb.ToString();
     }
 }
