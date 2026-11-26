@@ -3,9 +3,9 @@ using MacroBench.Telemetry;
 namespace MacroBench.Reporting;
 
 /// <summary>
-/// Immutable, machine-verifiable report summarizing a benchmark probe execution run.
+/// Immutable, machine-verifiable report summarizing a single macro-benchmark probe run.
 /// </summary>
-public readonly record struct ProbeReport(
+public sealed record ProbeReport(
     string ProbeName,
     string Scenario,
     TimeSpan Duration,
@@ -14,23 +14,28 @@ public readonly record struct ProbeReport(
     double BandwidthMBSec,
     HistogramSnapshot Latency,
     long DroppedOperations,
-    long GcAllocatedBytes,
-    string TopologySummary
+    GcDelta Gc,
+    string TopologySummary,
+    long ScheduleSlips = 0,
+    BudgetEvaluationResult? BudgetResult = null,
+    IReadOnlyDictionary<string, double>? CustomMetrics = null
 )
 {
     public double AchievedMpps => ThroughputOpsSec / 1_000_000.0;
+    public long GcAllocatedBytes => Gc.AllocatedBytes;
 
     /// <summary>
-    /// Evaluates the probe run against a hard performance budget.
-    /// Throws <see cref="PerformanceBudgetViolationException"/> if any threshold fails.
+    /// Evaluates the probe run against a hard performance budget, throwing
+    /// <see cref="PerformanceBudgetViolationException"/> if any threshold fails.
     /// </summary>
     public void AssertBudget(in PerformanceBudget budget)
     {
         budget.Evaluate(
             latency: Latency,
             drops: DroppedOperations,
-            gcAllocatedBytes: GcAllocatedBytes,
-            achievedMpps: AchievedMpps
+            gcAllocatedBytes: Gc.AllocatedBytes,
+            achievedMpps: AchievedMpps,
+            gen0Collections: Gc.Gen0Collections
         );
     }
 }

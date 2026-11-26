@@ -3,20 +3,19 @@ using System.Runtime.InteropServices;
 
 namespace MacroBench.Environment;
 
-public static partial class ProcessPriorityGuard
+public static class ProcessPriorityGuard
 {
-    public static bool TryElevate()
+    public static bool TryElevate(ProcessPriorityClass preferred = ProcessPriorityClass.High)
     {
         try
         {
             Process current = Process.GetCurrentProcess();
-
             try
             {
-                current.PriorityClass = ProcessPriorityClass.RealTime;
+                current.PriorityClass = preferred;
                 return true;
             }
-            catch
+            catch when (preferred == ProcessPriorityClass.RealTime)
             {
                 current.PriorityClass = ProcessPriorityClass.High;
                 return true;
@@ -29,52 +28,67 @@ public static partial class ProcessPriorityGuard
     }
 
     /// <summary>
-    /// Inspects the host OS power scheme/governor and issues warnings if frequency scaling
-    /// or power saving modes will contaminate TSC/timer measurements.
+    /// Inspects the host OS power scheme/governor and returns a warning message if frequency scaling
+    /// or power saving modes may contaminate measurements, or <see langword="null"/> if healthy.
     /// </summary>
-    public static void WarnIfThrottled()
+    public static string? DetectThrottlingWarning()
     {
         try
         {
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-            {
-                InspectLinuxGovernor();
-            }
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
-                InspectWindowsPowerScheme();
-            }
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            {
-                InspectMacOsThrottling();
-            }
+                return InspectLinuxGovernor();
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                return InspectWindowsPowerScheme();
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+                return InspectMacOsThrottling();
         }
         catch
         {
-            // Non-critical diagnostic inspection should never throw in a benchmark runner
+            // Non-critical diagnostic inspection must never throw
         }
+
+        return null;
     }
 
-    private static void InspectLinuxGovernor()
+    /// <summary>
+    /// Inspects the host OS power scheme/governor and writes a console warning if throttled.
+    /// </summary>
+    public static void WarnIfThrottled()
+    {
+        string? warning = DetectThrottlingWarning();
+        if (warning is null)
+            return;
+
+        bool useColor = !Console.IsOutputRedirected && string.IsNullOrEmpty(System.Environment.GetEnvironmentVariable("NO_COLOR"));
+        if (useColor)
+            Console.ForegroundColor = ConsoleColor.Yellow;
+
+        Console.WriteLine($"[WARN] {warning}");
+
+        if (useColor)
+            Console.ResetColor();
+    }
+
+    private static string? InspectLinuxGovernor()
     {
         const string governorPath = "/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor";
         if (!File.Exists(governorPath))
-            return;
+            return null;
 
         string governor = File.ReadAllText(governorPath).Trim();
         if (!string.Equals(governor, "performance", StringComparison.OrdinalIgnoreCase))
         {
-            EmitWarning(
-                $"Linux CPU scaling governor is set to '{governor}'. "
-                    + "For deterministic results, run: 'echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor'"
-            );
+            return $"Linux CPU scaling governor is '{governor}'. "
+                + "For deterministic results, run: 'echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor'";
         }
+
+        return null;
     }
 
-    private static void InspectWindowsPowerScheme()
+    private static string? InspectWindowsPowerScheme()
     {
-        // GUID_MIN_POWER_SAVINGS = 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c (High Performance)
-        // Ultimate Performance  = e9a42b02-d5df-448d-aa00-03f14749eb61
         Guid highPerfGuid = new("8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c");
         Guid ultimatePerfGuid = new("e9a42b02-d5df-448d-aa00-03f14749eb61");
 
@@ -85,28 +99,24 @@ public static partial class ProcessPriorityGuard
             if (status == 0 && pActiveGuid != 0)
             {
                 Guid activeGuid = Marshal.PtrToStructure<Guid>(pActiveGuid);
-
                 if (activeGuid != highPerfGuid && activeGuid != ultimatePerfGuid)
                 {
-                    EmitWarning(
-                        $"Windows power scheme is set to Balanced/Power Saver ({activeGuid}). "
-                            + "For deterministic low-latency benchmarks, enable 'High Performance' or 'Ultimate Performance' via powercfg."
-                    );
+                    return $"Windows power scheme is Balanced/Power Saver ({activeGuid}). "
+                        + "Enable 'High Performance' or 'Ultimate Performance' via powercfg for deterministic results.";
                 }
             }
         }
         finally
         {
             if (pActiveGuid != 0)
-            {
                 Kernel32.LocalFree(pActiveGuid);
-            }
         }
+
+        return null;
     }
 
-    private static void InspectMacOsThrottling()
+    private static string? InspectMacOsThrottling()
     {
-        // macOS does not expose user governors, but we can verify low-power mode via pmset
         using var process = new Process
         {
             StartInfo = new ProcessStartInfo
@@ -126,17 +136,10 @@ public static partial class ProcessPriorityGuard
 
             if (output.Contains("lowpowermode 1", StringComparison.OrdinalIgnoreCase))
             {
-                EmitWarning(
-                    "macOS Low Power Mode is currently ACTIVE. CPU clock cycles and IPC throughput will be throttled."
-                );
+                return "macOS Low Power Mode is active; CPU clocks and throughput will be throttled.";
             }
         }
-    }
 
-    private static void EmitWarning(string message)
-    {
-        Console.ForegroundColor = ConsoleColor.Yellow;
-        Console.WriteLine($"[WARN] {message}");
-        Console.ResetColor();
+        return null;
     }
 }
