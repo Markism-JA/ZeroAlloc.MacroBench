@@ -1,17 +1,17 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-namespace Benchmarking.Telemetry;
+namespace MacroBench.Telemetry;
 
 /// <summary>
-/// Cache-aligned, 0-allocation unmanaged latency histogram.
-/// Tracks latencies from 0 to <see cref="MaxTrackedNs"/> with 1-nanosecond resolution.
+/// Cache-aligned, 0-allocation unmanaged exact linear histogram (1 ns per bucket).
+/// Prefer <see cref="NativeHistogram"/> when tracking multi-millisecond ranges per worker thread.
 /// </summary>
 public sealed unsafe class UnmanagedLinearHistogram : IDisposable
 {
     private readonly int _maxTrackedNs;
     private readonly nuint _allocationSizeBytes;
-    private readonly long* _buckets;
+    private long* _buckets;
 
     private long _totalCount;
     private long _sumNs;
@@ -19,18 +19,12 @@ public sealed unsafe class UnmanagedLinearHistogram : IDisposable
     private long _maxNs;
     private int _isDisposed;
 
-    /// <summary>
-    /// Initializes an unmanaged linear histogram.
-    /// </summary>
-    /// <param name="maxTrackedNs">Maximum tracked nanoseconds (default 20,000,000 ns = 20 ms).</param>
     public UnmanagedLinearHistogram(int maxTrackedNs = 20_000_000)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxTrackedNs);
 
         _maxTrackedNs = maxTrackedNs;
         _allocationSizeBytes = (nuint)((maxTrackedNs + 1) * sizeof(long));
-
-        // 64-byte alignment matches standard CPU L1/L2 cache-line boundaries
         _buckets = (long*)NativeMemory.AlignedAlloc(_allocationSizeBytes, 64);
         Reset();
     }
@@ -48,15 +42,12 @@ public sealed unsafe class UnmanagedLinearHistogram : IDisposable
         }
     }
 
-    /// <summary>
-    /// Records a latency measurement in nanoseconds. Single-threaded hot path.
-    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Record(long elapsedNs)
     {
         if (elapsedNs < 0)
             elapsedNs = 0;
-        if (elapsedNs > _maxTrackedNs)
+        else if (elapsedNs > _maxTrackedNs)
             elapsedNs = _maxTrackedNs;
 
         _buckets[elapsedNs]++;
@@ -69,22 +60,18 @@ public sealed unsafe class UnmanagedLinearHistogram : IDisposable
             _maxNs = elapsedNs;
     }
 
-    /// <summary>
-    /// Thread-safe multi-producer recording.
-    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void RecordAtomic(long elapsedNs)
     {
         if (elapsedNs < 0)
             elapsedNs = 0;
-        if (elapsedNs > _maxTrackedNs)
+        else if (elapsedNs > _maxTrackedNs)
             elapsedNs = _maxTrackedNs;
 
         Interlocked.Increment(ref _buckets[elapsedNs]);
         Interlocked.Increment(ref _totalCount);
         Interlocked.Add(ref _sumNs, elapsedNs);
 
-        // Atomic Min/Max CAS loops
         long currentMin;
         while (elapsedNs < (currentMin = Volatile.Read(ref _minNs)))
         {
@@ -100,9 +87,6 @@ public sealed unsafe class UnmanagedLinearHistogram : IDisposable
         }
     }
 
-    /// <summary>
-    /// Computes the latency at a specific percentile (0.0 to 100.0).
-    /// </summary>
     public long GetPercentile(double percentile)
     {
         long total = Volatile.Read(ref _totalCount);
@@ -123,19 +107,51 @@ public sealed unsafe class UnmanagedLinearHistogram : IDisposable
     }
 
     /// <summary>
-    /// Captures an immutable snapshot of current percentiles without allocations.
+    /// Captures all percentiles in a single pass over the buckets.
     /// </summary>
     public HistogramSnapshot Snapshot()
     {
+        long total = Volatile.Read(ref _totalCount);
+        if (total == 0)
+            return default;
+
+        long t50 = (long)Math.Ceiling(0.50 * total);
+        long t90 = (long)Math.Ceiling(0.90 * total);
+        long t95 = (long)Math.Ceiling(0.95 * total);
+        long t99 = (long)Math.Ceiling(0.99 * total);
+        long t999 = (long)Math.Ceiling(0.999 * total);
+        long t9999 = (long)Math.Ceiling(0.9999 * total);
+
+        long p50 = 0, p90 = 0, p95 = 0, p99 = 0, p999 = 0, p9999 = 0;
+        bool f50 = false, f90 = false, f95 = false, f99 = false, f999 = false, f9999 = false;
+        long acc = 0;
+
+        for (int i = 0; i <= _maxTrackedNs; i++)
+        {
+            long count = _buckets[i];
+            if (count == 0)
+                continue;
+
+            acc += count;
+            if (!f50 && acc >= t50) { p50 = i; f50 = true; }
+            if (!f90 && acc >= t90) { p90 = i; f90 = true; }
+            if (!f95 && acc >= t95) { p95 = i; f95 = true; }
+            if (!f99 && acc >= t99) { p99 = i; f99 = true; }
+            if (!f999 && acc >= t999) { p999 = i; f999 = true; }
+            if (!f9999 && acc >= t9999) { p9999 = i; f9999 = true; break; }
+        }
+
         return new HistogramSnapshot(
-            TotalCount: TotalCount,
+            TotalCount: total,
             MinNs: MinNs,
             MeanNs: MeanNs,
-            P50Ns: GetPercentile(50.0),
-            P90Ns: GetPercentile(90.0),
-            P99Ns: GetPercentile(99.0),
-            P999Ns: GetPercentile(99.9),
-            MaxNs: MaxNs
+            P50Ns: p50,
+            P90Ns: p90,
+            P99Ns: p99,
+            P999Ns: p999,
+            MaxNs: MaxNs,
+            P95Ns: p95,
+            P9999Ns: p9999
         );
     }
 
@@ -156,6 +172,7 @@ public sealed unsafe class UnmanagedLinearHistogram : IDisposable
         if (_buckets != null)
         {
             NativeMemory.AlignedFree(_buckets);
+            _buckets = null;
         }
     }
 }
@@ -168,5 +185,7 @@ public readonly record struct HistogramSnapshot(
     long P90Ns,
     long P99Ns,
     long P999Ns,
-    long MaxNs
+    long MaxNs,
+    long P95Ns = 0,
+    long P9999Ns = 0
 );

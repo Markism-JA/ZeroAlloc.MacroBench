@@ -1,6 +1,6 @@
 using System.Runtime.CompilerServices;
 
-namespace Benchmarking.Telemetry;
+namespace MacroBench.Telemetry;
 
 /// <summary>
 /// Common interface for unmanaged metric structures protected by a 32-bit sequence lock.
@@ -11,73 +11,94 @@ public interface ISeqlockMetricBlock
 }
 
 /// <summary>
-/// Lock-free, zero-allocation Seqlock reader for live progress snapshots across threads.
+/// Lock-free, zero-allocation Seqlock reader and writer for live progress snapshots across threads.
+/// Includes explicit memory barriers for ARM64 weak memory ordering.
 /// </summary>
 public static unsafe class SeqlockMetricsReader
 {
-    private const int _defaultMaxSpinAttempts = 100_000;
+    private const int DefaultMaxSpinAttempts = 100_000;
 
     /// <summary>
-    /// Atomically reads an unmanaged Seqlock-protected block without blocking writers.
+    /// Attempts to atomically read an unmanaged Seqlock-protected block without blocking writers.
+    /// Returns <see langword="false"/> if the source pointer is null or the spin budget is exhausted.
     /// </summary>
-    /// <typeparam name="T">Unmanaged metric struct containing a leading uint sequence field.</typeparam>
-    /// <param name="pSource">Pointer to shared unmanaged memory block.</param>
-    /// <param name="maxSpinAttempts">Bounded spin threshold before returning current state.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static T Read<T>(T* pSource, int maxSpinAttempts = _defaultMaxSpinAttempts)
+    public static bool TryRead<T>(
+        T* pSource,
+        out T value,
+        int maxSpinAttempts = DefaultMaxSpinAttempts
+    )
         where T : unmanaged
     {
         if (pSource == null)
-            return default;
+        {
+            value = default;
+            return false;
+        }
 
         T result = default;
         var spin = new SpinWait();
         int attempts = 0;
-
         uint* pVersion = (uint*)pSource;
 
         while (attempts++ < maxSpinAttempts)
         {
             uint v1 = Volatile.Read(ref *pVersion);
 
-            // Odd sequence indicates writer is actively mutating the memory block
             if ((v1 & 1) != 0)
             {
                 spin.SpinOnce();
                 continue;
             }
 
-            // Copy block contents directly
             Unsafe.CopyBlockUnaligned(
                 destination: Unsafe.AsPointer(ref result),
                 source: pSource,
                 byteCount: (uint)sizeof(T)
             );
 
-            // Read memory barrier to prevent reordering
-            uint v2 = Volatile.Read(ref *pVersion);
+            // Prevent payload reads from reordering past the second version check on ARM64
+            Thread.MemoryBarrier();
 
-            // Stable read validated: sequence didn't mutate and was never odd
-            if (v1 == v2 && (v1 & 1) == 0)
+            uint v2 = Volatile.Read(ref *pVersion);
+            if (v1 == v2)
             {
-                return result;
+                value = result;
+                return true;
             }
 
             spin.SpinOnce();
         }
 
-        // Bounded fallback: copy current memory directly if spin timed out
-        Unsafe.CopyBlockUnaligned(
-            destination: Unsafe.AsPointer(ref result),
-            source: pSource,
-            byteCount: (uint)sizeof(T)
-        );
-
-        return result;
+        value = default;
+        return false;
     }
 
     /// <summary>
-    /// Writes a complete metric snapshot using Seqlock protocol.
+    /// Atomically reads an unmanaged Seqlock-protected block without blocking writers,
+    /// falling back to a direct copy if <paramref name="maxSpinAttempts"/> is exceeded.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static T Read<T>(T* pSource, int maxSpinAttempts = DefaultMaxSpinAttempts)
+        where T : unmanaged
+    {
+        if (TryRead(pSource, out T value, maxSpinAttempts))
+            return value;
+
+        if (pSource == null)
+            return default;
+
+        T fallback = default;
+        Unsafe.CopyBlockUnaligned(
+            destination: Unsafe.AsPointer(ref fallback),
+            source: pSource,
+            byteCount: (uint)sizeof(T)
+        );
+        return fallback;
+    }
+
+    /// <summary>
+    /// Writes a complete metric snapshot using the Seqlock protocol.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void Write<T>(T* pDestination, in T value)
@@ -91,8 +112,9 @@ public static unsafe class SeqlockMetricsReader
 
         // 1. Mark mutating (odd)
         Volatile.Write(ref *pVersion, seq + 1);
+        Thread.MemoryBarrier();
 
-        // 2. Copy payload (excluding the 4-byte sequence header)
+        // 2. Copy payload (excluding the leading 4-byte sequence header)
         byte* pDstPayload = (byte*)pDestination + sizeof(uint);
         fixed (T* pSrc = &value)
         {
@@ -104,7 +126,8 @@ public static unsafe class SeqlockMetricsReader
             );
         }
 
-        // 3. Mark completed (even)
+        // 3. Ensure all payload stores are globally visible before publishing the even sequence
+        Thread.MemoryBarrier();
         Volatile.Write(ref *pVersion, seq + 2);
     }
 }

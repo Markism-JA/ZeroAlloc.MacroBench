@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/MacroBench/MacroBench.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/MacroBench.Tests/MacroBench.Tests.csproj" />
+  </Folder>
+</Solution>

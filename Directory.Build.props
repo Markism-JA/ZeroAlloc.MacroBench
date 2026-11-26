@@ -4,7 +4,7 @@
     <Company>Markism-JA</Company>
     <Copyright>Copyright (c) 2026 Markism-JA</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <RepositoryUrl>https://github.com/Markism-JA/ZeroAlloc.Benchmarking</RepositoryUrl>
+    <RepositoryUrl>https://github.com/Markism-JA/ZeroAlloc.MacroBench</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>

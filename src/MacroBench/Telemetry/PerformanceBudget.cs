@@ -1,4 +1,4 @@
-namespace Benchmarking.Telemetry;
+namespace MacroBench.Telemetry;
 
 public sealed class PerformanceBudgetViolationException(string message) : Exception(message);
 

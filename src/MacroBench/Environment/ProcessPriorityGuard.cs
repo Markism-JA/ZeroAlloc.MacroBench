@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
-namespace Benchmarking.Environment;
+namespace MacroBench.Environment;
 
 public static partial class ProcessPriorityGuard
 {

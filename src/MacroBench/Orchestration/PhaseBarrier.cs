@@ -2,15 +2,15 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Platform.Threading;
 
-namespace Benchmarking.Orchestration;
+namespace MacroBench.Orchestration;
 
 /// <summary>
 /// Cache-aligned, 0-allocation synchronization barrier for multi-core probe rendezvous.
-/// Uses progressive spin-wait before falling back to native thread parking.
+/// Uses progressive spin-wait followed by <see cref="ThreadParker"/> two-phase kernel parking.
 /// </summary>
 public sealed unsafe class PhaseBarrier : IDisposable
 {
-    private const int _spinCountThreshold = 2048;
+    private const int SpinCountThreshold = 2048;
 
     private readonly int _participantCount;
     private readonly ThreadParker[] _parkers;
@@ -26,7 +26,6 @@ public sealed unsafe class PhaseBarrier : IDisposable
 
         _participantCount = participantCount;
 
-        // Allocate state variables aligned to 64 bytes (cache-line boundary)
         _stateBlock = (int*)NativeMemory.AlignedAlloc(64, 64);
         NativeMemory.Clear(_stateBlock, 64);
 
@@ -43,11 +42,12 @@ public sealed unsafe class PhaseBarrier : IDisposable
     }
 
     /// <summary>
-    /// Signals arrival and waits for all participant cores to arrive at this phase.
+    /// Signals arrival and waits for all participant cores to reach this phase.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SignalAndWait(int participantIndex)
     {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _isDisposed) != 0, this);
         ArgumentOutOfRangeException.ThrowIfNegative(participantIndex);
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(participantIndex, _participantCount);
 
@@ -59,28 +59,36 @@ public sealed unsafe class PhaseBarrier : IDisposable
 
         if (arrived == _participantCount)
         {
-            // Last core to arrive resets the counter and bumps generation
+            // Last participant resets arrival count and advances generation under full fence
             Volatile.Write(ref *pCount, 0);
             Interlocked.Increment(ref *pGen);
-
-            // Unconditionally unpark all participants to ensure no token is dropped
             WakeAllParticipants();
             return;
         }
 
-        // Progressive spin-wait
         var spinWait = new SpinWait();
         int spins = 0;
-        while (Volatile.Read(ref *pGen) == currentGen)
+        ThreadParker parker = _parkers[participantIndex];
+
+        while (Volatile.Read(ref *pGen) == currentGen && Volatile.Read(ref _isDisposed) == 0)
         {
-            if (++spins < _spinCountThreshold)
+            if (++spins < SpinCountThreshold)
             {
                 spinWait.SpinOnce();
                 continue;
             }
 
-            // Fallback to bounded kernel wait (10 ms)
-            _parkers[participantIndex].Park(timeoutMs: 10);
+            // Two-phase handshake: arm before re-checking generation so no wakeups are missed
+            if (parker.TryArm())
+            {
+                if (Volatile.Read(ref *pGen) != currentGen || Volatile.Read(ref _isDisposed) != 0)
+                {
+                    parker.Disarm();
+                    break;
+                }
+
+                parker.Park(timeoutMs: 10);
+            }
         }
     }
 
@@ -89,7 +97,6 @@ public sealed unsafe class PhaseBarrier : IDisposable
     {
         for (int i = 0; i < _participantCount; i++)
         {
-            // Direct unpark guarantees the token is delivered regardless of sleep flag timing
             _nativeHandles[i].Unpark();
         }
     }
@@ -98,6 +105,8 @@ public sealed unsafe class PhaseBarrier : IDisposable
     {
         if (Interlocked.Exchange(ref _isDisposed, 1) != 0)
             return;
+
+        WakeAllParticipants();
 
         if (_parkers != null)
         {

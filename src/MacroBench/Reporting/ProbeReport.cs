@@ -1,6 +1,6 @@
-using Benchmarking.Telemetry;
+using MacroBench.Telemetry;
 
-namespace Benchmarking.Reporting;
+namespace MacroBench.Reporting;
 
 /// <summary>
 /// Immutable, machine-verifiable report summarizing a benchmark probe execution run.
