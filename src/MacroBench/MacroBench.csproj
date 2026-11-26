@@ -8,16 +8,32 @@
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
-    <Description>Low-level macro-benchmarking and performance-regression harness for multi-threaded daemons and pipelines: pinned worker threads, open-loop pacers, seqlock metrics readers, unmanaged HDR histograms, and budget gating (64-bit AnyCPU).</Description>
-    <PackageTags>benchmarking;macrobenchmark;performance;latency;hdrhistogram;pacer;zero-allocation;dotnet</PackageTags>
+    <Description>Low-level macro-benchmarking and performance-regression harness for multi-threaded daemons and pipelines: pinned worker threads, open-loop pacers, seqlock metrics readers, unmanaged HDR histograms, compile-time probe discovery, and budget gating (64-bit AnyCPU).</Description>
+    <PackageTags>benchmarking;macrobenchmark;performance;latency;hdrhistogram;pacer;zero-allocation;source-generator;dotnet</PackageTags>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
   </PropertyGroup>
 
   <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="MinVer" PrivateAssets="All" />
     <PackageReference Include="ZeroAlloc.Platform" />
+  </ItemGroup>
+
+  <!-- Bundle Roslyn incremental generator directly inside ZeroAlloc.MacroBench package -->
+  <ItemGroup>
+    <ProjectReference Include="..\MacroBench.Generators\MacroBench.Generators.csproj"
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="all" />
+    <None Include="..\MacroBench.Generators\bin\$(Configuration)\netstandard2.0\MacroBench.Generators.dll"
+          Pack="true"
+          PackagePath="analyzers/dotnet/cs"
+          Visible="false" />
   </ItemGroup>
 </Project>

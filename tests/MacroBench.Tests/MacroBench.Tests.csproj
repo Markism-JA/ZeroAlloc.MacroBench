@@ -20,5 +20,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\MacroBench\MacroBench.csproj" />
+    <ProjectReference Include="..\..\src\MacroBench.Generators\MacroBench.Generators.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
   </ItemGroup>
 </Project>
