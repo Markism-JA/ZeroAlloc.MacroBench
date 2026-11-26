@@ -112,6 +112,14 @@ dotnet run -c Release -- --filter "*Pipeline*" --baseline ./BenchmarkArtifacts/p
 
 ---
 
+## Documentation
+
+- [Writing Probes](./docs/writing-probes.md) — `IMacroProbe` / `IAsyncMacroProbe` lifecycle, `[ProbeParams]` sweeps, `NativeHistogramHandle` in `delegate*` callbacks, `MergeFrom`, `PinnedWorkerThread`, and `PhaseBarrier`.
+- [CLI, Artifacts & CI Integration](./docs/cli-and-artifacts.md) — `ProbeSwitcher` interactive menu, CLI flags, `ProbeRunConfig`, JSON/Markdown/CSV schemas, and CI `--baseline` + `--budget-strict` gating.
+- [Macro-Benchmarking Methodology](./docs/methodology.md) — coordinated omission, `Min` floor vs. `P50` queue dwell, SMT core pinning, `High` vs. `RealTime` priority, and `NativeHistogram` vs. `UnmanagedLinearHistogram`.
+
+---
+
 ## Artifacts Generated
 
 When `--artifacts <dir>` (or `ProbeRunConfig.WithArtifactsDirectory(...)`) is configured, the built-in exporters write:
