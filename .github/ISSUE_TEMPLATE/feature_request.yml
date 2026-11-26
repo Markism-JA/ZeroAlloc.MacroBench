@@ -1,0 +1,24 @@
+name: Feature or Design Proposal
+description: Propose a new macro-benchmarking primitive, exporter, or generator feature
+title: "[Proposal]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / Use Case
+      description: What macro-benchmarking or regression-gating workflow are you trying to support?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed Design / API
+      description: Sketch the proposed types, attributes, or artifact schema.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Could this be composed outside the core library by consuming JSON/CSV artifacts?

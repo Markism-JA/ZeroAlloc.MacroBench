@@ -13,5 +13,6 @@ public sealed record ProbeRunSummary(
     IReadOnlyList<ProbeReport> Reports
 )
 {
+    /// <summary>True when every probe with a configured budget passed all checks.</summary>
     public bool AllBudgetsPassed => Reports.All(r => r.BudgetResult is null || r.BudgetResult.Passed);
 }

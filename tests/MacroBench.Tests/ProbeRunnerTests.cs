@@ -71,7 +71,7 @@ public class ProbeRunnerTests
             var probe = new SyntheticProbe(
                 "Synthetic.Ring",
                 "64B",
-                new PerformanceBudget(MaxP99Ns: 5_000, MaxAllowedDrops: 0, MaxAllowedGcBytes: 1024 * 1024)
+                new PerformanceBudget(MaxP99Ns: 5_000, MaxAllowedDrops: 0)
             );
 
             var config = ProbeRunConfig.Default

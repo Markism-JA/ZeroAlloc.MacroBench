@@ -45,6 +45,7 @@ public unsafe class SeqlockMetricsReaderTests
                     };
                     SeqlockMetricsReader.Write(block, in sample);
                     i++;
+                    Thread.SpinWait(16);
                 }
             });
 

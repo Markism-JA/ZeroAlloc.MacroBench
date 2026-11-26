@@ -12,6 +12,7 @@ namespace MacroBench.Execution;
 /// </summary>
 public static class ProbeSwitcher
 {
+    /// <summary>Parses CLI arguments, filters probes, runs them, and returns 0 on success or 1 on failure.</summary>
     public static int Run(
         string[] args,
         IReadOnlyList<IMacroProbe> probes,

@@ -14,8 +14,10 @@ public sealed class JsonExporter : IProbeExporter
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
+    /// <inheritdoc />
     public string Name => "Json";
 
+    /// <inheritdoc />
     public IReadOnlyList<string> Export(ProbeRunSummary summary, string? artifactsDirectory)
     {
         if (string.IsNullOrWhiteSpace(artifactsDirectory))

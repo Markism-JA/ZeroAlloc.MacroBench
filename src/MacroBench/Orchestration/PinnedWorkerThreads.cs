@@ -1,5 +1,4 @@
 using System.Runtime.CompilerServices;
-using Platform.CorePinning;
 using Platform.Threading;
 
 namespace MacroBench.Orchestration;
@@ -30,11 +29,22 @@ public sealed class PinnedWorkerThread : IDisposable
     private readonly CancellationTokenSource _cts;
     private int _isDisposed;
 
+    /// <summary>Logical name assigned to the worker OS thread.</summary>
     public string Name { get; }
+
+    /// <summary>Requested zero-based logical CPU core index.</summary>
     public int CoreIndex { get; }
+
+    /// <summary>True if OS CPU affinity pinning succeeded for this worker.</summary>
     public bool IsPinned { get; private set; }
+
+    /// <summary>Dedicated in-process thread parker owned by this worker.</summary>
     public ThreadParker Parker => _parker;
+
+    /// <summary>Blittable producer handle for issuing zero-allocation wakeups to this worker.</summary>
     public NativeThreadParkerHandle NativeHandle => _parker.NativeHandle;
+
+    /// <summary>True while the underlying OS thread is still running.</summary>
     public bool IsAlive => _thread.IsAlive;
 
     private PinnedWorkerThread(
@@ -66,13 +76,7 @@ public sealed class PinnedWorkerThread : IDisposable
                 return;
             }
 
-            var context = new PinnedWorkerContext(
-                Name,
-                CoreIndex,
-                IsPinned,
-                _parker,
-                _cts.Token
-            );
+            var context = new PinnedWorkerContext(Name, CoreIndex, IsPinned, _parker, _cts.Token);
             initialized.Set();
             workLoop(context);
         })
@@ -137,11 +141,14 @@ public sealed class PinnedWorkerThread : IDisposable
         }
     }
 
+    /// <summary>Signals the worker's parker to wake it if parked.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Unpark() => _parker.Unpark();
 
+    /// <summary>Waits for the worker thread to exit naturally within <paramref name="timeout"/> without cancelling.</summary>
     public bool WaitForCompletion(TimeSpan timeout) => _thread.Join(timeout);
 
+    /// <summary>Requests cancellation, unparks the worker, and waits for it to terminate.</summary>
     public void Join(TimeSpan timeout)
     {
         _cts.Cancel();
@@ -149,6 +156,7 @@ public sealed class PinnedWorkerThread : IDisposable
         _thread.Join(timeout);
     }
 
+    /// <summary>Cancels, unparks, joins, and disposes the worker thread's resources.</summary>
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _isDisposed, 1) != 0)
@@ -178,25 +186,41 @@ public readonly struct PinnedWorkerContext(
     CancellationToken cancellationToken
 )
 {
+    /// <summary>Worker thread name.</summary>
     public string Name => name;
+
+    /// <summary>Requested logical CPU core index.</summary>
     public int CoreIndex => coreIndex;
+
+    /// <summary>True if OS CPU affinity pinning succeeded.</summary>
     public bool IsPinned => isPinned;
+
+    /// <summary>Dedicated thread parker for this worker.</summary>
     public ThreadParker Parker => parker;
+
+    /// <summary>Blittable unpark handle for producers.</summary>
     public NativeThreadParkerHandle NativeHandle => parker.NativeHandle;
+
+    /// <summary>Cancellation token signaled on shutdown.</summary>
     public CancellationToken CancellationToken => cancellationToken;
 
+    /// <summary>Returns true while cancellation has not been requested.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool ShouldContinue() => !cancellationToken.IsCancellationRequested;
 
+    /// <summary>Pre-arms the worker's parker before checking work queues.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool TryArm() => parker.TryArm();
 
+    /// <summary>Disarms an armed parker if work arrived before parking.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Disarm() => parker.Disarm();
 
+    /// <summary>Parks the worker thread up to <paramref name="timeoutMs"/> milliseconds.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Park(int timeoutMs = -1) => parker.Park(timeoutMs);
 
+    /// <summary>Signals the worker's parker.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Unpark() => parker.Unpark();
 }

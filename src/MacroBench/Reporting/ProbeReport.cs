@@ -21,7 +21,10 @@ public sealed record ProbeReport(
     IReadOnlyDictionary<string, double>? CustomMetrics = null
 )
 {
+    /// <summary>Achieved throughput in millions of operations per second (Mpps).</summary>
     public double AchievedMpps => ThroughputOpsSec / 1_000_000.0;
+
+    /// <summary>Total managed bytes allocated during measurement.</summary>
     public long GcAllocatedBytes => Gc.AllocatedBytes;
 
     /// <summary>

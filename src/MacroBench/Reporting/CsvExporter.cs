@@ -8,8 +8,10 @@ namespace MacroBench.Reporting;
 /// </summary>
 public sealed class CsvExporter : IProbeExporter
 {
+    /// <inheritdoc />
     public string Name => "Csv";
 
+    /// <inheritdoc />
     public IReadOnlyList<string> Export(ProbeRunSummary summary, string? artifactsDirectory)
     {
         if (string.IsNullOrWhiteSpace(artifactsDirectory))

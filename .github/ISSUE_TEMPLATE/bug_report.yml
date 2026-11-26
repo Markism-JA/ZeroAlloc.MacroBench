@@ -1,0 +1,46 @@
+name: Bug Report
+description: Report a bug, measurement inaccuracy, or platform issue in ZeroAlloc.MacroBench
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear description of what went wrong and what you expected.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal Reproduction
+      description: Minimal probe or test snippet to reproduce the issue.
+      render: csharp
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: ZeroAlloc.MacroBench Version
+      placeholder: e.g., 0.1.0
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System & Architecture
+      options:
+        - Windows x64
+        - Windows ARM64
+        - Linux x64
+        - Linux ARM64
+        - macOS ARM64 (Apple Silicon)
+        - macOS x64
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context / Logs
+      description: Stack traces, host core count, or generated source output.

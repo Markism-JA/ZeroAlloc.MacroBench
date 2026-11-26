@@ -5,22 +5,38 @@ using System.Runtime.InteropServices;
 namespace MacroBench.Telemetry;
 
 /// <summary>
-/// Unmanaged state header + bucket storage for <see cref="NativeHistogram"/>.
+/// Unmanaged state header and bucket storage for <see cref="NativeHistogram"/>.
 /// 30 octaves * 128 sub-buckets = 3,840 buckets (~30.7 KB total, L1/L2 cache-resident).
 /// Exact 1 ns resolution up to 255 ns; &lt; 0.8% relative error up to ~68.7 seconds.
 /// </summary>
 [StructLayout(LayoutKind.Sequential)]
 public unsafe struct NativeHistogramState
 {
+    /// <summary>Number of linear sub-buckets per power-of-two octave (128).</summary>
     public const int SubBucketCount = 128;
-    public const int OctaveCount = 30;
-    public const int TotalBuckets = OctaveCount * SubBucketCount; // 3,840
-    public const long MaxTrackedNs = ((128L + 127L + 1L) << 28) - 1L; // ~68.7s
 
+    /// <summary>Number of octaves covering 0 ns through ~68.7 seconds (30).</summary>
+    public const int OctaveCount = 30;
+
+    /// <summary>Total bucket count (3,840).</summary>
+    public const int TotalBuckets = OctaveCount * SubBucketCount;
+
+    /// <summary>Maximum tracked latency in nanoseconds (~68.7 seconds); higher values clamp to the top bucket.</summary>
+    public const long MaxTrackedNs = ((128L + 127L + 1L) << 28) - 1L;
+
+    /// <summary>Total recorded sample count.</summary>
     public long TotalCount;
+
+    /// <summary>Cumulative sum of recorded samples in nanoseconds.</summary>
     public long SumNs;
+
+    /// <summary>Minimum recorded sample in nanoseconds.</summary>
     public long MinNs;
+
+    /// <summary>Maximum recorded sample in nanoseconds.</summary>
     public long MaxNs;
+
+    /// <summary>Fixed unmanaged array of 3,840 bucket counters.</summary>
     public fixed long Buckets[TotalBuckets];
 }
 
@@ -33,6 +49,7 @@ public readonly unsafe struct NativeHistogramHandle(NativeHistogramState* state)
 {
     private readonly NativeHistogramState* _state = state;
 
+    /// <summary>True when backed by a non-null <see cref="NativeHistogramState"/> pointer.</summary>
     public bool IsValid => _state != null;
 
     /// <summary>Records a latency sample in nanoseconds on a single-writer hot path.</summary>
@@ -123,6 +140,7 @@ public sealed unsafe class NativeHistogram : IDisposable
     private NativeHistogramState* _state;
     private int _isDisposed;
 
+    /// <summary>Allocates a 64-byte-aligned unmanaged <see cref="NativeHistogramState"/> block.</summary>
     public NativeHistogram()
     {
         _state = (NativeHistogramState*)
@@ -130,8 +148,13 @@ public sealed unsafe class NativeHistogram : IDisposable
         Reset();
     }
 
+    /// <summary>Blittable 8-byte handle for recording directly from unmanaged callbacks.</summary>
     public NativeHistogramHandle Handle => new(_state);
+
+    /// <summary>Total recorded sample count.</summary>
     public long TotalCount => _state == null ? 0 : Volatile.Read(ref _state->TotalCount);
+
+    /// <summary>Minimum recorded sample in nanoseconds (0 when empty).</summary>
     public long MinNs
     {
         get
@@ -142,7 +165,11 @@ public sealed unsafe class NativeHistogram : IDisposable
             return min == long.MaxValue ? 0 : min;
         }
     }
+
+    /// <summary>Maximum recorded sample in nanoseconds.</summary>
     public long MaxNs => _state == null ? 0 : Volatile.Read(ref _state->MaxNs);
+
+    /// <summary>Arithmetic mean of recorded samples in nanoseconds.</summary>
     public double MeanNs
     {
         get
@@ -154,15 +181,15 @@ public sealed unsafe class NativeHistogram : IDisposable
         }
     }
 
+    /// <summary>Records a latency sample in nanoseconds on a single-writer hot path.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Record(long elapsedNs) => Handle.Record(elapsedNs);
 
+    /// <summary>Thread-safe multi-producer sample recording in nanoseconds.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void RecordAtomic(long elapsedNs) => Handle.RecordAtomic(elapsedNs);
 
-    /// <summary>
-    /// Merges all samples from <paramref name="other"/> into this histogram (for combining per-worker histograms).
-    /// </summary>
+    /// <summary>Merges all samples from <paramref name="other"/> into this histogram.</summary>
     public void MergeFrom(NativeHistogram other)
     {
         ArgumentNullException.ThrowIfNull(other);
@@ -184,9 +211,7 @@ public sealed unsafe class NativeHistogram : IDisposable
         }
     }
 
-    /// <summary>
-    /// Captures all percentiles in a single pass over the 3,840 cache-resident buckets.
-    /// </summary>
+    /// <summary>Captures all percentiles in a single pass over the 3,840 cache-resident buckets.</summary>
     public HistogramSnapshot Snapshot()
     {
         if (_state == null)
@@ -240,6 +265,7 @@ public sealed unsafe class NativeHistogram : IDisposable
         );
     }
 
+    /// <summary>Clears all buckets and resets summary statistics.</summary>
     public void Reset()
     {
         if (_state == null)
@@ -249,6 +275,7 @@ public sealed unsafe class NativeHistogram : IDisposable
         _state->MinNs = long.MaxValue;
     }
 
+    /// <summary>Frees the unmanaged histogram allocation.</summary>
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _isDisposed, 1) != 0)

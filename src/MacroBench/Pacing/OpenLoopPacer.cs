@@ -16,14 +16,23 @@ public struct OpenLoopPacer
     private long _opIndex;
     private long _scheduleSlips;
 
+    /// <summary>Active pacing mode.</summary>
     public PacerMode Mode => _mode;
+
+    /// <summary>Configured target throughput in operations per second (0 when saturated).</summary>
     public long TargetOpsPerSec { get; }
+
+    /// <summary>Total dispatch slots issued since construction or <see cref="Reset"/>.</summary>
     public long OperationsIssued => _opIndex;
+
+    /// <summary>Number of slots where the producer fell more than one interval behind schedule.</summary>
     public long ScheduleSlips => _scheduleSlips;
 
+    /// <summary>Initializes a paced open-loop pacer targeting <paramref name="targetOpsPerSec"/>.</summary>
     public OpenLoopPacer(long targetOpsPerSec)
         : this(PacerMode.Paced, targetOpsPerSec) { }
 
+    /// <summary>Initializes an open-loop pacer in the specified <paramref name="mode"/>.</summary>
     public OpenLoopPacer(PacerMode mode, long targetOpsPerSec = 0)
     {
         _mode = mode;
@@ -44,8 +53,10 @@ public struct OpenLoopPacer
         _scheduleSlips = 0;
     }
 
+    /// <summary>Creates an unthrottled pacer running at maximum hardware rate.</summary>
     public static OpenLoopPacer CreateSaturated() => new(PacerMode.Saturated);
 
+    /// <summary>Creates a constant-rate open-loop pacer targeting <paramref name="targetOpsPerSec"/>.</summary>
     public static OpenLoopPacer CreatePaced(long targetOpsPerSec) =>
         new(PacerMode.Paced, targetOpsPerSec);
 

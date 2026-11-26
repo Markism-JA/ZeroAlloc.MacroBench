@@ -19,6 +19,7 @@ public sealed record HostEnvironmentInfo(
     DateTimeOffset CapturedAtUtc
 )
 {
+    /// <summary>Captures the current host environment, runtime, GC mode, and throttling status.</summary>
     public static HostEnvironmentInfo Capture()
     {
         string priority;
@@ -44,6 +45,7 @@ public sealed record HostEnvironmentInfo(
         );
     }
 
+    /// <summary>Formats a concise single-line summary of the host runtime and hardware.</summary>
     public string ToShortSummary() =>
         $"{RuntimeVersion} ({ProcessArchitecture}, {LogicalCoreCount} logical cores, {(IsServerGC ? "ServerGC" : "WorkstationGC")}) on {OsDescription}";
 }

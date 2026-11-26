@@ -8,8 +8,10 @@ namespace MacroBench.Reporting;
 /// </summary>
 public sealed class MarkdownExporter : IProbeExporter
 {
+    /// <inheritdoc />
     public string Name => "Markdown";
 
+    /// <inheritdoc />
     public IReadOnlyList<string> Export(ProbeRunSummary summary, string? artifactsDirectory)
     {
         if (string.IsNullOrWhiteSpace(artifactsDirectory))
@@ -21,6 +23,7 @@ public sealed class MarkdownExporter : IProbeExporter
         return [path];
     }
 
+    /// <summary>Renders the run summary as a GitHub-flavored Markdown string.</summary>
     public static string Render(ProbeRunSummary summary)
     {
         var sb = new StringBuilder();

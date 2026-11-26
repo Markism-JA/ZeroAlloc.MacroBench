@@ -5,6 +5,7 @@ namespace MacroBench.Reporting;
 /// </summary>
 public interface IProbeExporter
 {
+    /// <summary>Display name of the exporter.</summary>
     string Name { get; }
 
     /// <summary>
@@ -19,8 +20,15 @@ public interface IProbeExporter
 /// </summary>
 public static class Exporters
 {
+    /// <summary>Default console table exporter.</summary>
     public static IProbeExporter Console { get; } = new ConsoleSummaryExporter();
+
+    /// <summary>Default JSON exporter (<c>summary.json</c>).</summary>
     public static IProbeExporter Json { get; } = new JsonExporter();
+
+    /// <summary>Default Markdown exporter (<c>summary.md</c>).</summary>
     public static IProbeExporter Markdown { get; } = new MarkdownExporter();
+
+    /// <summary>Default CSV exporter (<c>summary.csv</c> and <c>percentiles.csv</c>).</summary>
     public static IProbeExporter Csv { get; } = new CsvExporter();
 }

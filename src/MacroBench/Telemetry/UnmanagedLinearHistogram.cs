@@ -19,6 +19,7 @@ public sealed unsafe class UnmanagedLinearHistogram : IDisposable
     private long _maxNs;
     private int _isDisposed;
 
+    /// <summary>Allocates a 64-byte-aligned linear bucket array covering <c>0..maxTrackedNs</c>.</summary>
     public UnmanagedLinearHistogram(int maxTrackedNs = 20_000_000)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxTrackedNs);
@@ -29,10 +30,19 @@ public sealed unsafe class UnmanagedLinearHistogram : IDisposable
         Reset();
     }
 
+    /// <summary>Maximum tracked latency in nanoseconds.</summary>
     public int MaxTrackedNs => _maxTrackedNs;
+
+    /// <summary>Total recorded sample count.</summary>
     public long TotalCount => Volatile.Read(ref _totalCount);
+
+    /// <summary>Minimum recorded sample in nanoseconds (0 when empty).</summary>
     public long MinNs => Volatile.Read(ref _minNs) == long.MaxValue ? 0 : Volatile.Read(ref _minNs);
+
+    /// <summary>Maximum recorded sample in nanoseconds.</summary>
     public long MaxNs => Volatile.Read(ref _maxNs);
+
+    /// <summary>Arithmetic mean of recorded samples in nanoseconds.</summary>
     public double MeanNs
     {
         get
@@ -42,6 +52,7 @@ public sealed unsafe class UnmanagedLinearHistogram : IDisposable
         }
     }
 
+    /// <summary>Records a latency sample in nanoseconds on a single-writer hot path.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Record(long elapsedNs)
     {
@@ -60,6 +71,7 @@ public sealed unsafe class UnmanagedLinearHistogram : IDisposable
             _maxNs = elapsedNs;
     }
 
+    /// <summary>Thread-safe multi-producer sample recording in nanoseconds.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void RecordAtomic(long elapsedNs)
     {
@@ -87,6 +99,7 @@ public sealed unsafe class UnmanagedLinearHistogram : IDisposable
         }
     }
 
+    /// <summary>Computes the latency in nanoseconds at the requested <paramref name="percentile"/> (0..100).</summary>
     public long GetPercentile(double percentile)
     {
         long total = Volatile.Read(ref _totalCount);
@@ -106,9 +119,7 @@ public sealed unsafe class UnmanagedLinearHistogram : IDisposable
         return _maxTrackedNs;
     }
 
-    /// <summary>
-    /// Captures all percentiles in a single pass over the buckets.
-    /// </summary>
+    /// <summary>Captures all percentiles in a single pass over the buckets.</summary>
     public HistogramSnapshot Snapshot()
     {
         long total = Volatile.Read(ref _totalCount);
@@ -155,6 +166,7 @@ public sealed unsafe class UnmanagedLinearHistogram : IDisposable
         );
     }
 
+    /// <summary>Clears all buckets and resets summary statistics.</summary>
     public void Reset()
     {
         NativeMemory.Clear(_buckets, _allocationSizeBytes);
@@ -164,6 +176,7 @@ public sealed unsafe class UnmanagedLinearHistogram : IDisposable
         _maxNs = 0;
     }
 
+    /// <summary>Frees the unmanaged bucket array.</summary>
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _isDisposed, 1) != 0)
@@ -177,6 +190,17 @@ public sealed unsafe class UnmanagedLinearHistogram : IDisposable
     }
 }
 
+/// <summary>Immutable percentile and summary statistics captured from a histogram.</summary>
+/// <param name="TotalCount">Total recorded sample count.</param>
+/// <param name="MinNs">Minimum latency in nanoseconds.</param>
+/// <param name="MeanNs">Mean latency in nanoseconds.</param>
+/// <param name="P50Ns">50th percentile (median) latency in nanoseconds.</param>
+/// <param name="P90Ns">90th percentile latency in nanoseconds.</param>
+/// <param name="P99Ns">99th percentile latency in nanoseconds.</param>
+/// <param name="P999Ns">99.9th percentile latency in nanoseconds.</param>
+/// <param name="MaxNs">Maximum latency in nanoseconds.</param>
+/// <param name="P95Ns">95th percentile latency in nanoseconds.</param>
+/// <param name="P9999Ns">99.99th percentile latency in nanoseconds.</param>
 public readonly record struct HistogramSnapshot(
     long TotalCount,
     long MinNs,

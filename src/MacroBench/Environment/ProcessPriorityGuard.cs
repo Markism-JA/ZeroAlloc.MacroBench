@@ -3,8 +3,12 @@ using System.Runtime.InteropServices;
 
 namespace MacroBench.Environment;
 
+/// <summary>
+/// Best-effort process priority elevation and OS power/throttling diagnostics.
+/// </summary>
 public static class ProcessPriorityGuard
 {
+    /// <summary>Attempts to elevate the current process priority class without throwing.</summary>
     public static bool TryElevate(ProcessPriorityClass preferred = ProcessPriorityClass.High)
     {
         try

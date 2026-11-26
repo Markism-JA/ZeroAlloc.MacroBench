@@ -7,8 +7,13 @@ namespace MacroBench.Execution;
 /// </summary>
 public interface IMacroProbe
 {
+    /// <summary>Primary display name of the probe.</summary>
     string Name { get; }
+
+    /// <summary>Optional scenario or parameter label.</summary>
     string Scenario => string.Empty;
+
+    /// <summary>Optional performance budget evaluated after measurement.</summary>
     PerformanceBudget? Budget => null;
 
     /// <summary>Allocates resources, spawns daemons, and wires transport/pipelines prior to warmup.</summary>

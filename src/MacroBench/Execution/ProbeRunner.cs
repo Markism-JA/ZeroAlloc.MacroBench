@@ -14,9 +14,11 @@ namespace MacroBench.Execution;
 /// </summary>
 public static unsafe class ProbeRunner
 {
+    /// <summary>Runs the specified probes using <see cref="ProbeRunConfig.Default"/>.</summary>
     public static ProbeRunSummary Run(params IMacroProbe[] probes) =>
         Run(ProbeRunConfig.Default, probes, CancellationToken.None);
 
+    /// <summary>Runs the specified probes using <paramref name="config"/> and returns the immutable run summary.</summary>
     public static ProbeRunSummary Run(
         ProbeRunConfig config,
         IEnumerable<IMacroProbe> probes,

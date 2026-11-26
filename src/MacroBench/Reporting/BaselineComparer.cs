@@ -28,6 +28,7 @@ public sealed record ProbeBaselineDiff(
 /// </summary>
 public static class BaselineComparer
 {
+    /// <summary>Deserializes a previously exported <c>summary.json</c> file.</summary>
     public static ProbeRunSummary LoadSummary(string jsonFilePath)
     {
         string json = File.ReadAllText(jsonFilePath);
@@ -35,6 +36,7 @@ public static class BaselineComparer
             ?? throw new InvalidDataException($"Failed to deserialize ProbeRunSummary from '{jsonFilePath}'.");
     }
 
+    /// <summary>Computes percentage deltas for all probes present in both <paramref name="baseline"/> and <paramref name="current"/>.</summary>
     public static IReadOnlyList<ProbeBaselineDiff> Compare(
         ProbeRunSummary baseline,
         ProbeRunSummary current
@@ -77,6 +79,7 @@ public static class BaselineComparer
         return diffs;
     }
 
+    /// <summary>Formats baseline comparison deltas as a GitHub-flavored Markdown table.</summary>
     public static string RenderMarkdown(IReadOnlyList<ProbeBaselineDiff> diffs)
     {
         var sb = new StringBuilder();

@@ -18,8 +18,10 @@ public sealed unsafe class PhaseBarrier : IDisposable
     private readonly int* _stateBlock; // [0] = Count, [1] = Generation
     private int _isDisposed;
 
+    /// <summary>Number of participating threads required to release the barrier.</summary>
     public int ParticipantCount => _participantCount;
 
+    /// <summary>Allocates a cache-aligned barrier for <paramref name="participantCount"/> threads.</summary>
     public PhaseBarrier(int participantCount)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(participantCount);
@@ -101,6 +103,7 @@ public sealed unsafe class PhaseBarrier : IDisposable
         }
     }
 
+    /// <summary>Wakes any waiting participants and frees unmanaged barrier memory and parkers.</summary>
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _isDisposed, 1) != 0)

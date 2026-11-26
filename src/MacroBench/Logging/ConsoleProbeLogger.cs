@@ -10,6 +10,7 @@ public sealed class ConsoleProbeLogger : IProbeLogger
     private readonly bool _useColor;
     private readonly Lock _sync = new();
 
+    /// <summary>Creates a console logger writing to <paramref name="writer"/> (defaults to <see cref="Console.Out"/>).</summary>
     public ConsoleProbeLogger(TextWriter? writer = null, bool? useColor = null)
     {
         _writer = writer ?? Console.Out;
@@ -22,6 +23,7 @@ public sealed class ConsoleProbeLogger : IProbeLogger
             );
     }
 
+    /// <inheritdoc />
     public void Log(in ProbeLogEvent logEvent)
     {
         (string tag, ConsoleColor color) = logEvent.Kind switch

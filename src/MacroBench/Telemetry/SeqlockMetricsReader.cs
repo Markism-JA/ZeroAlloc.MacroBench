@@ -7,6 +7,7 @@ namespace MacroBench.Telemetry;
 /// </summary>
 public interface ISeqlockMetricBlock
 {
+    /// <summary>Monotonically incremented sequence counter (odd while writer mutates, even when stable).</summary>
     public uint Sequence { get; set; }
 }
 

@@ -7,6 +7,7 @@ namespace MacroBench.Attributes;
 [AttributeUsage(AttributeTargets.Class, Inherited = false, AllowMultiple = false)]
 public sealed class MacroProbeAttribute(string? name = null) : Attribute
 {
+    /// <summary>Optional display name override for the probe.</summary>
     public string? Name { get; } = name;
 }
 
@@ -17,6 +18,7 @@ public sealed class MacroProbeAttribute(string? name = null) : Attribute
 [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field, Inherited = true, AllowMultiple = false)]
 public sealed class ProbeParamsAttribute(params object[] values) : Attribute
 {
+    /// <summary>Parameter values to sweep across generated probe scenarios.</summary>
     public object[] Values { get; } = values;
 }
 
@@ -26,11 +28,24 @@ public sealed class ProbeParamsAttribute(params object[] values) : Attribute
 [AttributeUsage(AttributeTargets.Class, Inherited = false, AllowMultiple = false)]
 public sealed class ProbeBudgetAttribute : Attribute
 {
+    /// <summary>Maximum allowed P50 latency in nanoseconds.</summary>
     public long MaxP50Ns { get; set; } = long.MaxValue;
+
+    /// <summary>Maximum allowed P99 latency in nanoseconds.</summary>
     public long MaxP99Ns { get; set; } = long.MaxValue;
+
+    /// <summary>Maximum allowed P99.9 latency in nanoseconds.</summary>
     public long MaxP999Ns { get; set; } = long.MaxValue;
+
+    /// <summary>Maximum allowed dropped operations.</summary>
     public long MaxAllowedDrops { get; set; } = long.MaxValue;
+
+    /// <summary>Maximum allowed managed GC allocation in bytes during measurement.</summary>
     public long MaxAllowedGcBytes { get; set; } = long.MaxValue;
+
+    /// <summary>Minimum required throughput in millions of operations per second (Mpps).</summary>
     public double MinThroughputMpps { get; set; } = 0.0;
+
+    /// <summary>Maximum allowed Gen0 garbage collections during measurement.</summary>
     public int MaxGen0Collections { get; set; } = int.MaxValue;
 }

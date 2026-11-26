@@ -10,8 +10,10 @@ public sealed class ConsoleSummaryExporter : IProbeExporter
     private readonly TextWriter _writer;
     private readonly bool _useColor;
 
+    /// <inheritdoc />
     public string Name => "Console";
 
+    /// <summary>Creates a console summary exporter writing to <paramref name="writer"/> (defaults to <see cref="Console.Out"/>).</summary>
     public ConsoleSummaryExporter(TextWriter? writer = null, bool? useColor = null)
     {
         _writer = writer ?? Console.Out;
@@ -24,6 +26,7 @@ public sealed class ConsoleSummaryExporter : IProbeExporter
             );
     }
 
+    /// <inheritdoc />
     public IReadOnlyList<string> Export(ProbeRunSummary summary, string? artifactsDirectory)
     {
         _writer.WriteLine();

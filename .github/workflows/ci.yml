@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-latest ]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore dependencies
+        run: dotnet restore ZeroAlloc.MacroBench.slnx
+
+      - name: Build (Release, zero warnings)
+        run: dotnet build ZeroAlloc.MacroBench.slnx --no-restore --no-incremental -c Release /warnaserror
+
+      - name: Test (Release)
+        run: dotnet test ZeroAlloc.MacroBench.slnx --no-build -c Release --verbosity normal
+
+      - name: Test (Debug)
+        run: dotnet test ZeroAlloc.MacroBench.slnx --no-restore -c Debug --verbosity normal

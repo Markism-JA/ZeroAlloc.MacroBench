@@ -1,5 +1,6 @@
 namespace MacroBench.Telemetry;
 
+/// <summary>Exception thrown when a probe fails one or more <see cref="PerformanceBudget"/> checks.</summary>
 public sealed class PerformanceBudgetViolationException(string message) : Exception(message);
 
 /// <summary>
@@ -7,6 +8,7 @@ public sealed class PerformanceBudgetViolationException(string message) : Except
 /// </summary>
 public sealed record BudgetEvaluationResult(bool Passed, IReadOnlyList<string> Violations)
 {
+    /// <summary>Shared passing result instance.</summary>
     public static BudgetEvaluationResult Pass { get; } = new(true, Array.Empty<string>());
 }
 

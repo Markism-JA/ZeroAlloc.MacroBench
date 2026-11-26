@@ -28,6 +28,7 @@ public readonly struct GcDeltaTracker
         _startGen2 = gen2;
     }
 
+    /// <summary>Captures starting allocation and GC collection counts.</summary>
     public static GcDeltaTracker Start() =>
         new(
             GC.GetTotalAllocatedBytes(precise: true),
@@ -36,6 +37,7 @@ public readonly struct GcDeltaTracker
             GC.CollectionCount(2)
         );
 
+    /// <summary>Computes the allocation and GC collection deltas since <see cref="Start"/>.</summary>
     public GcDelta Stop() =>
         new(
             AllocatedBytes: Math.Max(0, GC.GetTotalAllocatedBytes(precise: true) - _startAllocatedBytes),

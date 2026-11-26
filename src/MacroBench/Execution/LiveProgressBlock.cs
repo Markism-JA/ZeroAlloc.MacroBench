@@ -10,9 +10,18 @@ namespace MacroBench.Execution;
 [StructLayout(LayoutKind.Sequential)]
 public struct LiveProgressBlock : ISeqlockMetricBlock
 {
+    /// <inheritdoc />
     public uint Sequence { get; set; }
+
+    /// <summary>Total operations completed so far.</summary>
     public long Operations;
+
+    /// <summary>Total dropped operations observed so far.</summary>
     public long DroppedOperations;
+
+    /// <summary>Total payload bytes transferred so far.</summary>
     public long BytesTransferred;
+
+    /// <summary>Total pacer schedule slips observed so far.</summary>
     public long ScheduleSlips;
 }

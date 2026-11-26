@@ -11,7 +11,6 @@
     <Description>Low-level macro-benchmarking and performance-regression harness for multi-threaded daemons and pipelines: pinned worker threads, open-loop pacers, seqlock metrics readers, unmanaged HDR histograms, compile-time probe discovery, and budget gating (64-bit AnyCPU).</Description>
     <PackageTags>benchmarking;macrobenchmark;performance;latency;hdrhistogram;pacer;zero-allocation;source-generator;dotnet</PackageTags>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);CS1591</NoWarn>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
