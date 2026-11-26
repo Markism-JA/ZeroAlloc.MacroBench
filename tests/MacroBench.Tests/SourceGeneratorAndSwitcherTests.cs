@@ -87,6 +87,38 @@ public class SourceGeneratorAndSwitcherTests
         Assert.True(inner.SetupAwaited);
         Assert.True(inner.TeardownAwaited);
     }
+
+    [Fact]
+    public async Task ProbeSwitcher_InteractiveMenu_SelectsByNumbers()
+    {
+        IReadOnlyList<IMacroProbe> probes = GeneratedProbes.CreateAll();
+        var output = new StringWriter();
+        using var input = new StringReader("1,3\n");
+
+        var fastConfig = ProbeRunConfig.Default
+            .WithArtifactsDirectory(null)
+            .WithDurations(TimeSpan.FromMilliseconds(5), TimeSpan.FromMilliseconds(5)) with
+        {
+            ElevateProcessPriority = false,
+            UseHighResolutionTimerScope = false,
+            CollectGcBeforeMeasure = false,
+            LiveProgressInterval = TimeSpan.Zero,
+        };
+
+        int exit = await ProbeSwitcher.RunAsync(
+            ["--no-color"],
+            probes,
+            baseConfig: fastConfig,
+            output: output,
+            input: input
+        );
+
+        Assert.Equal(0, exit);
+        string text = output.ToString();
+        Assert.Contains("Available MacroProbes:", text);
+        Assert.Contains("[1]", text);
+        Assert.Contains("[3]", text);
+    }
     [Fact]
     public void GeneratedProbes_ExpandsCartesianParamsAndBudget()
     {

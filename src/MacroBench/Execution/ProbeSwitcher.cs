@@ -6,26 +6,29 @@ using MacroBench.Telemetry;
 namespace MacroBench.Execution;
 
 /// <summary>
-/// Lightweight CLI runner for executing, filtering, and baseline-comparing registered <see cref="IMacroProbe"/> instances.
-/// Supports <c>--filter</c>, <c>--artifacts</c>, <c>--warmup-ms</c>, <c>--duration-ms</c>,
+/// Lightweight CLI runner for executing, filtering, interactively selecting, and baseline-comparing
+/// registered <see cref="IMacroProbe"/> instances.
+/// Supports <c>--filter</c>, <c>--all</c>, <c>--artifacts</c>, <c>--warmup-ms</c>, <c>--duration-ms</c>,
 /// <c>--budget-strict</c>, <c>--baseline</c>, <c>--list</c>, and <c>--no-color</c>.
 /// </summary>
 public static class ProbeSwitcher
 {
-    /// <summary>Parses CLI arguments, filters probes, runs them synchronously, and returns 0 on success or 1 on failure.</summary>
+    /// <summary>Parses CLI arguments, filters or prompts for probes, runs them synchronously, and returns 0 on success or 1 on failure.</summary>
     public static int Run(
         string[] args,
         IReadOnlyList<IMacroProbe> probes,
         ProbeRunConfig? baseConfig = null,
-        TextWriter? output = null
-    ) => RunAsync(args, probes, baseConfig, output).GetAwaiter().GetResult();
+        TextWriter? output = null,
+        TextReader? input = null
+    ) => RunAsync(args, probes, baseConfig, output, input).GetAwaiter().GetResult();
 
-    /// <summary>Parses CLI arguments, filters probes, runs them asynchronously, and returns 0 on success or 1 on failure.</summary>
+    /// <summary>Parses CLI arguments, filters or prompts for probes, runs them asynchronously, and returns 0 on success or 1 on failure.</summary>
     public static async Task<int> RunAsync(
         string[] args,
         IReadOnlyList<IMacroProbe> probes,
         ProbeRunConfig? baseConfig = null,
         TextWriter? output = null,
+        TextReader? input = null,
         CancellationToken cancellationToken = default
     )
     {
@@ -39,20 +42,37 @@ public static class ProbeSwitcher
         string? warmupMsStr = GetArgValue(args, "--warmup-ms");
         string? durationMsStr = GetArgValue(args, "--duration-ms");
         bool listOnly = HasFlag(args, "--list");
+        bool runAll = HasFlag(args, "--all");
         bool strictBudget = HasFlag(args, "--budget-strict");
         bool noColor = HasFlag(args, "--no-color");
+        bool useColor =
+            !noColor
+            && output is null
+            && !Console.IsOutputRedirected
+            && string.IsNullOrEmpty(System.Environment.GetEnvironmentVariable("NO_COLOR"));
 
-        IReadOnlyList<IMacroProbe> selected = string.IsNullOrWhiteSpace(filter)
-            ? probes
-            : probes.Where(p => MatchesGlob(p.Name, filter) || MatchesGlob(p.Scenario, filter)).ToList();
+        IReadOnlyList<IMacroProbe> selected;
+        if (!string.IsNullOrWhiteSpace(filter))
+        {
+            selected = FilterProbes(probes, filter);
+        }
+        else if (listOnly || runAll || probes.Count <= 1 || (input is null && Console.IsInputRedirected))
+        {
+            selected = probes;
+        }
+        else
+        {
+            selected = PromptInteractiveSelection(probes, writer, input ?? Console.In, useColor);
+            if (selected.Count == 0)
+                return 1;
+        }
 
         if (listOnly)
         {
             writer.WriteLine($"Discovered {selected.Count} probe(s):");
-            foreach (IMacroProbe p in selected)
+            for (int i = 0; i < selected.Count; i++)
             {
-                string label = string.IsNullOrEmpty(p.Scenario) ? p.Name : $"{p.Name} ({p.Scenario})";
-                writer.WriteLine($"  - {label}");
+                writer.WriteLine($"  [{i + 1}] {FormatProbeLabel(selected[i])}");
             }
             return 0;
         }
@@ -107,6 +127,93 @@ public static class ProbeSwitcher
             writer.WriteLine(ex.Message);
             return 1;
         }
+    }
+
+    private static IReadOnlyList<IMacroProbe> PromptInteractiveSelection(
+        IReadOnlyList<IMacroProbe> probes,
+        TextWriter writer,
+        TextReader reader,
+        bool useColor
+    )
+    {
+        WriteColoredLine(writer, "Available MacroProbes:", ConsoleColor.Cyan, useColor);
+        for (int i = 0; i < probes.Count; i++)
+        {
+            writer.WriteLine($"  [{i + 1}] {FormatProbeLabel(probes[i])}");
+        }
+
+        WriteColored(
+            writer,
+            "Select probe(s) by number (e.g. '1' or '1,3'), glob (e.g. '*Ring*'), or '*' for all: ",
+            ConsoleColor.Yellow,
+            useColor
+        );
+
+        string? line = reader.ReadLine()?.Trim();
+        if (string.IsNullOrEmpty(line))
+        {
+            writer.WriteLine("No selection entered. Aborting.");
+            return Array.Empty<IMacroProbe>();
+        }
+
+        if (line == "*")
+            return probes;
+
+        string[] tokens = line.Split([',', ' '], StringSplitOptions.RemoveEmptyEntries);
+        var chosen = new List<IMacroProbe>();
+        var seen = new HashSet<int>();
+        bool allNumeric = true;
+
+        foreach (string token in tokens)
+        {
+            if (int.TryParse(token, out int oneBased) && oneBased >= 1 && oneBased <= probes.Count)
+            {
+                if (seen.Add(oneBased - 1))
+                    chosen.Add(probes[oneBased - 1]);
+            }
+            else
+            {
+                allNumeric = false;
+                break;
+            }
+        }
+
+        if (allNumeric && chosen.Count > 0)
+            return chosen;
+
+        // Fall back to glob matching against probe name or scenario
+        IReadOnlyList<IMacroProbe> matched = FilterProbes(probes, line);
+        if (matched.Count == 0)
+        {
+            writer.WriteLine($"No probes matched selection '{line}'.");
+        }
+        return matched;
+    }
+
+    private static IReadOnlyList<IMacroProbe> FilterProbes(IReadOnlyList<IMacroProbe> probes, string pattern) =>
+        probes.Where(p => MatchesGlob(p.Name, pattern) || MatchesGlob(p.Scenario, pattern)).ToList();
+
+    private static string FormatProbeLabel(IMacroProbe probe) =>
+        string.IsNullOrEmpty(probe.Scenario) ? probe.Name : $"{probe.Name} ({probe.Scenario})";
+
+    private static void WriteColored(TextWriter writer, string text, ConsoleColor color, bool useColor)
+    {
+        if (!useColor)
+        {
+            writer.Write(text);
+            return;
+        }
+
+        ConsoleColor prev = Console.ForegroundColor;
+        Console.ForegroundColor = color;
+        writer.Write(text);
+        Console.ForegroundColor = prev;
+    }
+
+    private static void WriteColoredLine(TextWriter writer, string text, ConsoleColor color, bool useColor)
+    {
+        WriteColored(writer, text, color, useColor);
+        writer.WriteLine();
     }
 
     private static bool HasFlag(string[] args, string flag) =>

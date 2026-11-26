@@ -3,7 +3,8 @@ using System.Globalization;
 namespace MacroBench.Reporting;
 
 /// <summary>
-/// Renders an aligned, color-aware summary table across all probes in a <see cref="ProbeRunSummary"/>.
+/// Renders an aligned, BDN-style color-coded summary table across all probes in a <see cref="ProbeRunSummary"/>.
+/// Automatically disables colors when stdout is redirected or <c>NO_COLOR</c> is set.
 /// </summary>
 public sealed class ConsoleSummaryExporter : IProbeExporter
 {
@@ -30,9 +31,10 @@ public sealed class ConsoleSummaryExporter : IProbeExporter
     public IReadOnlyList<string> Export(ProbeRunSummary summary, string? artifactsDirectory)
     {
         _writer.WriteLine();
-        _writer.WriteLine($"// Host: {summary.Host.ToShortSummary()}");
-        _writer.WriteLine(
-            $"// RunId: {summary.RunId} | Total Duration: {summary.TotalDuration.TotalMilliseconds:F1} ms"
+        WriteColoredLine($"// Host: {summary.Host.ToShortSummary()}", ConsoleColor.DarkCyan);
+        WriteColoredLine(
+            $"// RunId: {summary.RunId} | Total Duration: {summary.TotalDuration.TotalMilliseconds:F1} ms",
+            ConsoleColor.DarkCyan
         );
         _writer.WriteLine();
 
@@ -40,9 +42,9 @@ public sealed class ConsoleSummaryExporter : IProbeExporter
             "| Probe                      | Ops/sec      | P50 (us)  | P99 (us)  | P99.9 (us) | Drops   | GC (B)   | Status |";
         string divider = new('-', header.Length);
 
-        _writer.WriteLine(divider);
-        _writer.WriteLine(header);
-        _writer.WriteLine(divider);
+        WriteColoredLine(divider, ConsoleColor.DarkGray);
+        WriteColoredLine(header, ConsoleColor.Cyan);
+        WriteColoredLine(divider, ConsoleColor.DarkGray);
 
         foreach (ProbeReport r in summary.Reports)
         {
@@ -67,31 +69,22 @@ public sealed class ConsoleSummaryExporter : IProbeExporter
             );
 
             _writer.Write(linePrefix);
-            if (_useColor)
+            ConsoleColor statusColor = status switch
             {
-                ConsoleColor prev = Console.ForegroundColor;
-                Console.ForegroundColor = status switch
-                {
-                    "PASS" => ConsoleColor.Green,
-                    "FAIL" => ConsoleColor.Red,
-                    _ => ConsoleColor.Gray,
-                };
-                _writer.Write($"{status,-6}");
-                Console.ForegroundColor = prev;
-                _writer.WriteLine(" |");
-            }
-            else
-            {
-                _writer.WriteLine($"{status,-6} |");
-            }
+                "PASS" => ConsoleColor.Green,
+                "FAIL" => ConsoleColor.Red,
+                _ => ConsoleColor.Gray,
+            };
+            WriteColored($"{status,-6}", statusColor);
+            _writer.WriteLine(" |");
         }
 
-        _writer.WriteLine(divider);
+        WriteColoredLine(divider, ConsoleColor.DarkGray);
 
         bool hasCustom = summary.Reports.Any(r => r.CustomMetrics is { Count: > 0 });
         if (hasCustom)
         {
-            _writer.WriteLine("Custom Metrics:");
+            WriteColoredLine("Custom Metrics:", ConsoleColor.Cyan);
             foreach (ProbeReport r in summary.Reports)
             {
                 if (r.CustomMetrics is not { Count: > 0 })
@@ -108,6 +101,26 @@ public sealed class ConsoleSummaryExporter : IProbeExporter
 
         _writer.WriteLine();
         return Array.Empty<string>();
+    }
+
+    private void WriteColored(string text, ConsoleColor color)
+    {
+        if (!_useColor)
+        {
+            _writer.Write(text);
+            return;
+        }
+
+        ConsoleColor prev = Console.ForegroundColor;
+        Console.ForegroundColor = color;
+        _writer.Write(text);
+        Console.ForegroundColor = prev;
+    }
+
+    private void WriteColoredLine(string text, ConsoleColor color)
+    {
+        WriteColored(text, color);
+        _writer.WriteLine();
     }
 
     private static string Truncate(string value, int maxLen) =>
